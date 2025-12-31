@@ -1,0 +1,568 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PING PONG — QuickPlay Games</title>
+<style>
+  /* ============================================================
+     QuickPlay · PING PONG (failsafe one-file build)
+     Теми: dark / light / neon. RU/UK/EN. Стабільні клавіші.
+     ============================================================ */
+
+  :root{
+    --bg:#0b1220; --panel:#141b2a; --panel2:#0f1624;
+    --fg:#e8eef7; --fg-d:#aeb9cc;
+    --a:#4cc4ff; --a2:#8a63ff; --ok:#29f0b0; --danger:#ff4c6d;
+    --line:#cfe3ff33; --p1:#4cc4ff; --p2:#ff6b6b; --ball:#ffffff;
+  }
+  .theme-light{
+    --bg:#f5f7fb; --panel:#ffffff; --panel2:#edf2fb;
+    --fg:#1c2431; --fg-d:#5a6b84;
+    --a:#2b7fff; --a2:#5f3cff; --ok:#00b87a; --danger:#ff3b57;
+    --line:#1c243133; --p1:#2b7fff; --p2:#ff3b57; --ball:#0b1220;
+  }
+  .theme-neon{
+    --bg:#05070f; --panel:#0a0f1a; --panel2:#070a14;
+    --fg:#eaf4ff; --fg-d:#8ea7cc;
+    --a:#00e5ff; --a2:#7a00ff; --ok:#00ffa3; --danger:#ff2b6e;
+    --line:#d2ffff33; --p1:#00e5ff; --p2:#ff2b6e; --ball:#ffffff;
+  }
+
+  *{box-sizing:border-box}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--bg); color:var(--fg);
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Noto Sans",Arial;
+    overflow:hidden; overscroll-behavior:none;
+  }
+  .screen{position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:2.2vh 2.2vw;}
+  .panel{
+    width:min(1100px,94vw); min-height:min(700px,88vh);
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid #ffffff12; border-radius:22px; box-shadow:0 40px 80px #0008;
+    padding:clamp(16px,2.6vw,28px);
+  }
+
+  /* Loading */
+  #loading{display:flex}
+  .loading-wrap{text-align:center; user-select:none;}
+  .title{font-size:clamp(36px,8vw,76px);font-weight:900;letter-spacing:1.2px;text-shadow:0 24px 60px #4cc4ff30,0 0 120px #4cc4ff40}
+  .dots{margin-top:10px;color:var(--fg-d);font-size:18px;letter-spacing:.8px}
+  .spinner{width:72px;height:72px;margin:26px auto 0;border-radius:50%;background:conic-gradient(from 0deg,var(--a)0 60deg,transparent 60deg 360deg);animation:spin 1.2s linear infinite;box-shadow:0 0 42px #4cc4ff55}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .fade-out{animation:fadeOut .8s ease forwards}
+  @keyframes fadeOut{to{opacity:0;transform:scale(.98)}}
+
+  /* Menu */
+  .menu-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .logo{display:flex;align-items:center;gap:12px;font-weight:900;font-size:22px}
+  .mark{width:36px;height:36px;border-radius:10px;background:conic-gradient(from 210deg,var(--a)0 120deg,var(--a2)120deg 240deg,var(--ok)240deg 360deg);box-shadow:0 10px 24px #4cc4ff40}
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:12px}
+  .btn{
+    appearance:none; border:1px solid #ffffff12; outline:none; cursor:pointer; border-radius:16px;
+    background:linear-gradient(180deg,#1a2330aa,#101720aa);
+    color:var(--fg); font-weight:800; font-size:16px; padding:12px 16px; text-align:left;
+    box-shadow:0 12px 24px #0006, inset 0 1px 0 #ffffff18; transition:all .15s ease;
+  }
+  .btn:hover{filter:brightness(1.08)} .btn:active{transform:translateY(1px)}
+  .btn.primary{background:linear-gradient(180deg,#1c2731,#121923); border-color:#4cc4ff55; box-shadow:0 14px 28px #4cc4ff33}
+  .row{display:flex; align-items:center; gap:10px} .small{font-size:13px;color:var(--fg-d)} .value{font-weight:900}
+  .hidden{display:none !important}
+
+  /* Game */
+  #gameCanvas{
+    width:900px; height:500px;
+    border-radius:16px; border:1px solid #ffffff12;
+    background:linear-gradient(180deg,#0b1220,#080f1a);
+    box-shadow:inset 0 12px 24px #0007, 0 18px 36px #0007;
+  }
+  .hud{display:flex; align-items:center; justify-content:space-between; margin-top:12px}
+  .score{font-size:28px; font-weight:900}
+
+  /* Overlays */
+  .overlay{position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:#0006; backdrop-filter:blur(6px)}
+  .overlay .box{width:min(580px,88vw); padding:16px; background:linear-gradient(180deg,var(--panel),var(--panel2)); border:1px solid #ffffff22; border-radius:18px; box-shadow:0 30px 60px #0008}
+  .overlay .grid{grid-template-columns:1fr}
+</style>
+</head>
+<body>
+
+<!-- ===== LOADING ===== -->
+<section id="loading" class="screen">
+  <div class="panel loading-wrap">
+    <div class="title" data-i18n="title">PING PONG</div>
+    <div class="dots" id="dots" data-i18n="loading">Загрузка...</div>
+    <div class="spinner"></div>
+    <div class="small" data-i18n="studioNote">QuickPlay Games · минимализм с эффектами</div>
+  </div>
+</section>
+
+<!-- ===== MENU ===== -->
+<section id="menu" class="screen">
+  <div class="panel" style="position:relative;">
+    <div class="menu-header">
+      <div class="logo"><div class="mark"></div><div data-i18n="brand">QuickPlay Games</div></div>
+      <div class="row small">
+        <span data-i18n="theme">Тема</span>: <span id="themeName" class="value">Dark</span>
+        <button class="btn" id="btnLang">🌐 <span id="langVal">Русский</span></button>
+      </div>
+    </div>
+
+    <h2 style="margin:0 0 4px;" data-i18n="gameName">PING PONG</h2>
+    <div class="small" data-i18n="menuHint">Режимы: Player vs Player / Player vs AI. Настройки ниже.</div>
+
+    <div class="grid">
+      <button class="btn primary" id="btnStart" data-i18n="start">▶ Старт</button>
+      <button class="btn" id="btnMode"><span data-i18n="mode">Режим</span>: <span id="modeVal">Player vs AI</span></button>
+      <button class="btn" id="btnDiff"><span data-i18n="difficulty">Сложность</span>: <span id="diffVal">Normal</span></button>
+      <button class="btn" id="btnBall"><span data-i18n="ballSpeed">Скорость мяча</span>: <span id="ballVal">1.00</span></button>
+      <button class="btn" id="btnPaddle"><span data-i18n="paddleSize">Размер ракетки</span>: <span id="paddleVal">1.00</span></button>
+      <button class="btn" id="btnWind"><span data-i18n="wind">Эффект ветра</span>: <span id="windVal">ON</span></button>
+      <button class="btn" id="btnSound"><span data-i18n="sound">Звук</span>: <span id="soundVal">ON</span></button>
+      <button class="btn" id="btnTheme"><span data-i18n="themeBtn">Тема</span>: <span id="themeVal">Dark</span></button>
+      <button class="btn" id="btnRestart" data-i18n="restart">🔁 Сбросить настройки</button>
+      <button class="btn danger" id="btnExit" data-i18n="exit">❌ В меню</button>
+
+      <div class="btn">
+        <div class="small" data-i18n="controlsTitle">Управление (одна клавиатура)</div>
+        <div data-i18n="controlsP1">🎮 Игрок 1 (левый): W — вверх / S — вниз</div>
+        <div data-i18n="controlsP2">🎮 Игрок 2 (правый): ↑ — вверх / ↓ — вниз</div>
+      </div>
+      <div class="btn">
+        <div class="small" data-i18n="winTitle">Победа</div>
+        <div data-i18n="winText">Первый до 10 очков. После гола — пауза 1 с и подача из центра.</div>
+      </div>
+    </div>
+
+    <div class="small" style="margin-top:8px" data-i18n="escNote">ESC в игре — Пауза. «Ветер» — полупрозрачный след за мячом.</div>
+
+    <!-- Play Mode choice (overlay IN MENU) -->
+    <div id="playOverlay" class="overlay">
+      <div class="box">
+        <h2 data-i18n="chooseMode">Выбор режима</h2>
+        <div class="grid">
+          <button class="btn primary" id="btnPlayAI">🤖 <span data-i18n="vsAI">Играть против ИИ</span></button>
+          <button class="btn" id="btnPlayPVP">👥 <span data-i18n="vsPVP">Играть вдвоём</span></button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div class="small" style="min-width:140px" data-i18n="difficulty">Сложность</div>
+          <button class="btn" id="btnDiffInOverlay"><span id="diffValOverlay">Normal</span></button>
+          <div style="flex:1"></div>
+          <button class="btn danger" id="btnCancelOverlay" data-i18n="cancel">Отмена</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== GAME ===== -->
+<section id="game" class="screen">
+  <div class="panel" style="position:relative;">
+    <div class="menu-header">
+      <div class="logo"><div class="mark"></div><div>QuickPlay · PING PONG</div></div>
+      <div class="small" data-i18n="tips">ESC — Пауза · W/S (левая) · ↑/↓ (правая)</div>
+    </div>
+
+    <canvas id="gameCanvas" width="900" height="500"></canvas>
+    <div class="hud">
+      <div class="score" id="scoreLeft" style="color:var(--p1)">0</div>
+      <div class="score" id="scoreRight" style="color:var(--p2)">0</div>
+      <div class="small">
+        <span data-i18n="themeShort">Тема</span>: <span id="gameTheme">Dark</span> ·
+        <span data-i18n="windShort">Ветер</span>: <span id="gameWind">ON</span> ·
+        <span data-i18n="soundShort">Звук</span>: <span id="gameSound">ON</span>
+      </div>
+    </div>
+
+    <!-- Pause -->
+    <div id="pauseOverlay" class="overlay">
+      <div class="box">
+        <h2 data-i18n="pause">Пауза</h2>
+        <div class="grid">
+          <button class="btn primary" id="btnCont" data-i18n="continue">▶ Продолжить</button>
+          <button class="btn" id="btnRestartInGame" data-i18n="restartShort">🔁 Рестарт</button>
+          <button class="btn danger" id="btnMenuFromPause" data-i18n="backMenu">❌ В меню</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Win -->
+    <div id="winOverlay" class="overlay">
+      <div class="box">
+        <h2 id="winTitle">Player 1 Wins</h2>
+        <div class="grid">
+          <button class="btn primary" id="btnAgain" data-i18n="playAgain">▶ Сыграть ещё</button>
+          <button class="btn danger" id="btnBackMenu" data-i18n="backMenu">❌ В меню</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ============================================================
+   PING PONG · failsafe init (DOMContentLoaded) + RU/UK/EN
+   ============================================================ */
+window.addEventListener('DOMContentLoaded', function(){
+  "use strict";
+
+  /* ---------- Helpers ---------- */
+  const byId = (id)=>document.getElementById(id);
+  const add = (el, type, fn, cap=false)=> el && el.addEventListener(type, fn, cap);
+  const remove = (el, type, fn, cap=false)=> el && el.removeEventListener(type, fn, cap);
+  const clamp=(v,a,b)=>Math.min(Math.max(v,a),b);
+
+  /* ---------- I18N ---------- */
+  const LS_KEY_LANG = 'pp_lang';
+  const i18n = {
+    ru:{ title:'PING PONG', loading:'Загрузка...', studioNote:'QuickPlay Games · минимализм с эффектами',
+         brand:'QuickPlay Games', theme:'Тема', gameName:'PING PONG', menuHint:'Режимы: Player vs Player / Player vs AI. Настройки ниже.',
+         start:'▶ Старт', mode:'Режим', difficulty:'Сложность', ballSpeed:'Скорость мяча', paddleSize:'Размер ракетки',
+         wind:'Эффект ветра', sound:'Звук', themeBtn:'Тема', restart:'🔁 Сбросить настройки', exit:'❌ В меню',
+         controlsTitle:'Управление (одна клавиатура)', controlsP1:'🎮 Игрок 1 (левый): W — вверх / S — вниз', controlsP2:'🎮 Игрок 2 (правый): ↑ — вверх / ↓ — вниз',
+         winTitle:'Победа', winText:'Первый до 10 очков. После гола — пауза 1 с и подача из центра.',
+         escNote:'ESC в игре — Пауза. «Ветер» — полупрозрачный след за мячом.', tips:'ESC — Пауза · W/S (левая) · ↑/↓ (правая)',
+         themeShort:'Тема', windShort:'Ветер', soundShort:'Звук', pause:'Пауза', continue:'▶ Продолжить', restartShort:'🔁 Рестарт', backMenu:'❌ В меню',
+         playAgain:'▶ Сыграть ещё', chooseMode:'Выбор режима', vsAI:'Играть против ИИ', vsPVP:'Играть вдвоём', cancel:'Отмена',
+         p1wins:'Победил Игрок 1', p2wins:'Победил Игрок 2', langLabel:'Русский' },
+    uk:{ title:'PING PONG', loading:'Завантаження...', studioNote:'QuickPlay Games · мінімалістично з ефектами',
+         brand:'QuickPlay Games', theme:'Тема', gameName:'PING PONG', menuHint:'Режими: Player vs Player / Player vs AI. Налаштування нижче.',
+         start:'▶ Старт', mode:'Режим', difficulty:'Складність', ballSpeed:'Швидкість мʼяча', paddleSize:'Розмір ракетки',
+         wind:'Ефект вітру', sound:'Звук', themeBtn:'Тема', restart:'🔁 Скинути налаштування', exit:'❌ В меню',
+         controlsTitle:'Керування (одна клавіатура)', controlsP1:'🎮 Гравець 1 (ліва): W — вгору / S — вниз', controlsP2:'🎮 Гравець 2 (права): ↑ — вгору / ↓ — вниз',
+         winTitle:'Перемога', winText:'Перший до 10 очок. Після голу — пауза 1 с і подача з центру.',
+         escNote:'ESC у грі — Пауза. «Вітер» — напівпрозорий слід за мʼячем.', tips:'ESC — Пауза · W/S (ліва) · ↑/↓ (права)',
+         themeShort:'Тема', windShort:'Вітер', soundShort:'Звук', pause:'Пауза', continue:'▶ Продовжити', restartShort:'🔁 Рестарт', backMenu:'❌ В меню',
+         playAgain:'▶ Зіграти ще', chooseMode:'Обрати режим', vsAI:'Грати проти ШІ', vsPVP:'Грати вдвох', cancel:'Скасувати',
+         p1wins:'Переміг Гравець 1', p2wins:'Переміг Гравець 2', langLabel:'Українська' },
+    en:{ title:'PING PONG', loading:'Loading...', studioNote:'QuickPlay Games · minimal with effects',
+         brand:'QuickPlay Games', theme:'Theme', gameName:'PING PONG', menuHint:'Modes: Player vs Player / Player vs AI. Configure below.',
+         start:'▶ Start', mode:'Mode', difficulty:'Difficulty', ballSpeed:'Ball Speed', paddleSize:'Paddle Size',
+         wind:'Wind Effect', sound:'Sound', themeBtn:'Theme', restart:'🔁 Reset Settings', exit:'❌ Menu',
+         controlsTitle:'Controls (one keyboard)', controlsP1:'🎮 Player 1 (left): W — up / S — down', controlsP2:'🎮 Player 2 (right): ↑ — up / ↓ — down',
+         winTitle:'Victory', winText:'First to 10 points. After goal — 1 s pause and center serve.',
+         escNote:'ESC — Pause. Wind draws ghost trail.', tips:'ESC — Pause · W/S (left) · ↑/↓ (right)',
+         themeShort:'Theme', windShort:'Wind', soundShort:'Sound', pause:'Pause', continue:'▶ Continue', restartShort:'🔁 Restart', backMenu:'❌ Menu',
+         playAgain:'▶ Play Again', chooseMode:'Choose mode', vsAI:'Play vs AI', vsPVP:'Two Players', cancel:'Cancel',
+         p1wins:'Player 1 Wins', p2wins:'Player 2 Wins', langLabel:'English' }
+  };
+  let LANG = localStorage.getItem(LS_KEY_LANG) || 'ru';
+  const THEMES = ['dark','light','neon'];
+  const t = (key)=> (i18n[LANG] && i18n[LANG][key]) || key;
+  const cap = (s)=> s.charAt(0).toUpperCase()+s.slice(1);
+  const applyI18N = ()=>{
+    document.querySelectorAll('[data-i18n]').forEach(el=>{
+      const k = el.getAttribute('data-i18n');
+      el.textContent = t(k);
+    });
+    const langVal = byId('langVal'); if(langVal) langVal.textContent = t('langLabel');
+  };
+  const applyTheme = ()=>{
+    document.body.classList.remove('theme-light','theme-neon');
+    if(State.theme==='light') document.body.classList.add('theme-light');
+    if(State.theme==='neon')  document.body.classList.add('theme-neon');
+  };
+
+  /* ---------- Screens ---------- */
+  const scr = { loading:byId('loading'), menu:byId('menu'), game:byId('game') };
+  const show = (id)=>{
+    Object.values(scr).forEach(el=>{ if(el) el.style.display='none'; });
+    if(scr[id]) scr[id].style.display='flex';
+    const tn=byId('themeName'), gt=byId('gameTheme');
+    if(tn) tn.textContent = cap(State.theme);
+    if(gt) gt.textContent = cap(State.theme);
+    const gw=byId('gameWind'), gs=byId('gameSound');
+    if(gw) gw.textContent = State.wind ? 'ON' : 'OFF';
+    if(gs) gs.textContent = State.sound ? 'ON' : 'OFF';
+    applyI18N();
+  };
+
+  /* ---------- State ---------- */
+  const State = {
+    mode:'ai',
+    difficulty:'Normal',
+    ballSpeed:1.00,
+    paddleSize:1.00,
+    wind:true,
+    sound:true,
+    theme:'dark',
+    targetScore:10
+  };
+
+  /* ---------- Loading ---------- */
+  (function dots(){ const el=byId('dots'); let i=0; if(!el) return;
+    setInterval(()=>{ i=(i+1)%4; el.textContent=t('loading').replace('...','')+'.'.repeat(i); },280);
+  })();
+  setTimeout(()=>{ if(scr.loading) scr.loading.classList.add('fade-out'); setTimeout(()=>show('menu'),820); },3000);
+
+  /* ---------- Menu ---------- */
+  const refreshMenu = ()=>{
+    const mv=byId('modeVal'), dv=byId('diffVal'), bv=byId('ballVal'), pv=byId('paddleVal'), wv=byId('windVal'), sv=byId('soundVal'), tv=byId('themeVal'), tn=byId('themeName');
+    if(mv) mv.textContent = State.mode==='ai' ? 'Player vs AI' : 'Player vs Player';
+    if(dv) dv.textContent = State.difficulty;
+    if(bv) bv.textContent = State.ballSpeed.toFixed(2);
+    if(pv) pv.textContent = State.paddleSize.toFixed(2);
+    if(wv) wv.textContent = State.wind?'ON':'OFF';
+    if(sv) sv.textContent = State.sound?'ON':'OFF';
+    if(tv) tv.textContent = cap(State.theme);
+    if(tn) tn.textContent = cap(State.theme);
+  };
+  applyTheme(); applyI18N(); refreshMenu();
+
+  add(byId('btnLang'),'click',()=>{
+    LANG = (LANG==='ru'?'uk':LANG==='uk'?'en':'ru');
+    localStorage.setItem(LS_KEY_LANG, LANG);
+    applyI18N();
+  });
+  add(byId('btnMode'),'click',()=>{ State.mode=(State.mode==='ai'?'pvp':'ai'); refreshMenu(); });
+  add(byId('btnDiff'),'click',()=>{
+    const order=['Easy','Normal','Hard']; const i=order.indexOf(State.difficulty);
+    State.difficulty=order[(i+1)%order.length]||'Easy'; refreshMenu();
+  });
+  add(byId('btnBall'),'click',()=>{ let v=State.ballSpeed+0.1; if(v>2.0)v=0.5; State.ballSpeed=+v.toFixed(2); refreshMenu(); });
+  add(byId('btnPaddle'),'click',()=>{ let v=State.paddleSize+0.1; if(v>2.0)v=0.6; State.paddleSize=+v.toFixed(2); refreshMenu(); });
+  add(byId('btnWind'),'click',()=>{ State.wind=!State.wind; refreshMenu(); });
+  add(byId('btnSound'),'click',()=>{ State.sound=!State.sound; refreshMenu(); });
+  add(byId('btnTheme'),'click',()=>{
+    const i=THEMES.indexOf(State.theme); State.theme=THEMES[(i+1)%THEMES.length];
+    applyTheme(); refreshMenu(); applyI18N();
+  });
+  add(byId('btnRestart'),'click',()=>{
+    Object.assign(State,{mode:'ai',difficulty:'Normal',ballSpeed:1.00,paddleSize:1.00,wind:true,sound:true,theme:'dark'});
+    applyTheme(); refreshMenu(); applyI18N();
+  });
+  add(byId('btnExit'),'click',()=>{ show('menu'); });
+
+  /* ---------- Start overlay (in MENU) ---------- */
+  const playOverlay=byId('playOverlay');
+  const diffOverlayLabel=byId('diffValOverlay');
+  const openPlayOverlay=()=>{ if(diffOverlayLabel) diffOverlayLabel.textContent=State.difficulty; if(playOverlay) playOverlay.style.display='flex'; };
+  add(byId('btnStart'),'click', openPlayOverlay);
+  add(byId('btnCancelOverlay'),'click',()=>{ if(playOverlay) playOverlay.style.display='none'; });
+  add(byId('btnDiffInOverlay'),'click',()=>{
+    const order=['Easy','Normal','Hard']; const i=order.indexOf(State.difficulty);
+    State.difficulty=order[(i+1)%order.length]||'Easy'; if(diffOverlayLabel) diffOverlayLabel.textContent=State.difficulty; refreshMenu();
+  });
+  add(byId('btnPlayAI'),'click',()=>{ State.mode='ai'; if(playOverlay) playOverlay.style.display='none'; startGame(); });
+  add(byId('btnPlayPVP'),'click',()=>{ State.mode='pvp'; if(playOverlay) playOverlay.style.display='none'; startGame(); });
+
+  /* ---------- Audio ---------- */
+  const audio = {
+    ctx:null, enabled(){return State.sound},
+    ensure(){ if(!this.ctx){ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); } },
+    hit(){ if(!this.enabled())return; this.ensure();
+      const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
+      o.type='sine'; o.frequency.setValueAtTime(680,t); o.frequency.exponentialRampToValueAtTime(420,t+0.06);
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.12);
+      o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t+0.13);
+    },
+    goal(){ if(!this.enabled())return; this.ensure();
+      const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
+      o.type='square'; o.frequency.setValueAtTime(220,t); o.frequency.exponentialRampToValueAtTime(120,t+0.2);
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.35,t+0.04); g.gain.exponentialRampToValueAtTime(0.0001,t+0.35);
+      o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t+0.36);
+    }
+  };
+
+  /* ---------- Game ---------- */
+  const canvas=byId('gameCanvas'); const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  const Field={margin:14};
+  const PADDLE_SPEED=0.65; // однакова швидкість
+
+  let Game=null, Raf=null, Paused=false, ShowingWin=false;
+
+  function startGame(){
+    Game = {
+      left:{x:Field.margin,y:H/2,w:12,h:80*State.paddleSize,speed:PADDLE_SPEED},
+      right:{x:W-Field.margin-12,y:H/2,w:12,h:80*State.paddleSize,speed:PADDLE_SPEED},
+      ball:{x:W/2,y:H/2,r:7,vx:0.28*State.ballSpeed*(Math.random()<0.5?-1:1),vy:0.12*State.ballSpeed*(Math.random()<0.5?-1:1),trail:[]},
+      trailMax:18, scoreL:0, scoreR:0,
+      ai:{enabled:(State.mode==='ai'),delay:120,last:performance.now(),targetY:H/2},
+      keys:{w:false,s:false,up:false,down:false},
+      servePause:0, difficulty:State.difficulty
+    };
+
+    // Складність ШІ — тільки реакція
+    if(Game.difficulty==='Easy'){   Game.ai.delay=220; }
+    else if(Game.difficulty==='Normal'){ Game.ai.delay=140; }
+    else { Game.ai.delay=80; } // Hard
+
+    // оновити HUD
+    byId('scoreLeft').textContent='0'; byId('scoreRight').textContent='0';
+    byId('gameTheme').textContent = cap(State.theme);
+    byId('gameWind').textContent  = State.wind?'ON':'OFF';
+    byId('gameSound').textContent = State.sound?'ON':'OFF';
+
+    Paused=false; ShowingWin=false;
+    const pO=byId('pauseOverlay'), wO=byId('winOverlay');
+    if(pO) pO.style.display='none'; if(wO) wO.style.display='none';
+
+    show('game');
+    attachControls();
+
+    if(Raf) cancelAnimationFrame(Raf);
+    let last=performance.now();
+    const loop=()=>{ Raf=requestAnimationFrame(loop); const t=performance.now(), dt=Math.min(t-last,50); last=t; if(Paused||ShowingWin) return; update(dt); render(); };
+    loop();
+  }
+
+  /* ---------- Controls ---------- */
+  const onKeyDown=(e)=>{
+    if(!Game) return;
+    if(['KeyW','KeyS','ArrowUp','ArrowDown'].includes(e.code)){ e.preventDefault(); e.stopPropagation(); }
+    if(e.code==='KeyW') Game.keys.w=true;
+    if(e.code==='KeyS') Game.keys.s=true;
+    if(e.code==='ArrowUp')   Game.keys.up=true;
+    if(e.code==='ArrowDown') Game.keys.down=true;
+  };
+  const onKeyUp=(e)=>{
+    if(!Game) return;
+    if(['KeyW','KeyS','ArrowUp','ArrowDown'].includes(e.code)){ e.preventDefault(); e.stopPropagation(); }
+    if(e.code==='KeyW') Game.keys.w=false;
+    if(e.code==='KeyS') Game.keys.s=false;
+    if(e.code==='ArrowUp')   Game.keys.up=false;
+    if(e.code==='ArrowDown') Game.keys.down=false;
+  };
+  const onEscPause=(e)=>{
+    if(e.code==='Escape' && Game && !ShowingWin){
+      Paused=!Paused; const pO=byId('pauseOverlay'); if(pO) pO.style.display = Paused ? 'flex' : 'none';
+    }
+  };
+  const attachControls=()=>{
+    add(window,'keydown',onKeyDown,true); add(window,'keyup',onKeyUp,true);
+    add(document,'keydown',onKeyDown,true); add(document,'keyup',onKeyUp,true);
+    add(window,'keydown',onEscPause,true);
+    // Pause/Win buttons
+    add(byId('btnCont'),'click',()=>{ Paused=false; const pO=byId('pauseOverlay'); if(pO) pO.style.display='none'; });
+    add(byId('btnRestartInGame'),'click',()=>{ Paused=false; const pO=byId('pauseOverlay'); if(pO) pO.style.display='none'; startGame(); });
+    add(byId('btnMenuFromPause'),'click',()=>{ Paused=false; detachControls(); show('menu'); });
+    add(byId('btnAgain'),'click',()=>{ ShowingWin=false; const wO=byId('winOverlay'); if(wO) wO.style.display='none'; startGame(); });
+    add(byId('btnBackMenu'),'click',()=>{ ShowingWin=false; detachControls(); show('menu'); });
+  };
+  const detachControls=()=>{
+    remove(window,'keydown',onKeyDown,true); remove(window,'keyup',onKeyUp,true);
+    remove(document,'keydown',onKeyDown,true); remove(document,'keyup',onKeyUp,true);
+    remove(window,'keydown',onEscPause,true);
+  };
+
+  /* ---------- Update ---------- */
+  function update(dt){
+    // ліва
+    if(Game.keys.w) Game.left.y -= Game.left.speed*dt;
+    if(Game.keys.s) Game.left.y += Game.left.speed*dt;
+
+    // права
+    if(!Game.ai.enabled){
+      if(Game.keys.up)   Game.right.y -= Game.right.speed*dt;
+      if(Game.keys.down) Game.right.y += Game.right.speed*dt;
+    } else {
+      if(performance.now()-Game.ai.last>Game.ai.delay){
+        Game.ai.last = performance.now();
+        Game.ai.targetY = Game.ball.y + (Math.random()-0.5)*16;
+      }
+      const diff = Game.ai.targetY - Game.right.y;
+      Game.right.y += clamp(diff, -Game.right.speed*dt, Game.right.speed*dt);
+    }
+
+    // межі
+    Game.left.y  = clamp(Game.left.y,  Game.left.h/2+Field.margin, H-Field.margin-Game.left.h/2);
+    Game.right.y = clamp(Game.right.y, Game.right.h/2+Field.margin,H-Field.margin-Game.right.h/2);
+
+    if(Game.servePause>0){ Game.servePause=Math.max(0,Game.servePause-dt); return; }
+
+    // м'яч
+    Game.ball.x += Game.ball.vx*dt; Game.ball.y += Game.ball.vy*dt;
+
+    // слід
+    if(State.wind){
+      Game.ball.trail.push({x:Game.ball.x,y:Game.ball.y});
+      if(Game.ball.trail.length>Game.trailMax) Game.ball.trail.shift();
+    } else Game.ball.trail.length=0;
+
+    // межі поля
+    if(Game.ball.y < Field.margin + Game.ball.r){
+      Game.ball.y = Field.margin + Game.ball.r; Game.ball.vy = Math.abs(Game.ball.vy); audio.hit();
+    }
+    if(Game.ball.y > H - Field.margin - Game.ball.r){
+      Game.ball.y = H - Field.margin - Game.ball.r; Game.ball.vy = -Math.abs(Game.ball.vy); audio.hit();
+    }
+
+    // відскоки
+    if(Game.ball.x - Game.ball.r < Game.left.x + Game.left.w &&
+       Game.ball.x > Game.left.x &&
+       Math.abs(Game.ball.y - Game.left.y) < Game.left.h/2 + Game.ball.r){
+      Game.ball.x = Game.left.x + Game.left.w + Game.ball.r;
+      const rel=(Game.ball.y-Game.left.y)/(Game.left.h/2), speed=Math.hypot(Game.ball.vx,Game.ball.vy)*1.05, angle=rel*0.8;
+      Game.ball.vx =  Math.cos(angle)*speed; Game.ball.vy = Math.sin(angle)*speed;
+      if(Game.ball.vx<0) Game.ball.vx = Math.abs(Game.ball.vx);
+      audio.hit();
+    }
+    if(Game.ball.x + Game.ball.r > Game.right.x &&
+       Game.ball.x < Game.right.x + Game.right.w &&
+       Math.abs(Game.ball.y - Game.right.y) < Game.right.h/2 + Game.ball.r){
+      Game.ball.x = Game.right.x - Game.ball.r;
+      const rel=(Game.ball.y-Game.right.y)/(Game.right.h/2), speed=Math.hypot(Game.ball.vx,Game.ball.vy)*1.05, angle=rel*0.8;
+      Game.ball.vx = -Math.cos(angle)*speed; Game.ball.vy = Math.sin(angle)*speed;
+      if(Game.ball.vx>0) Game.ball.vx = -Math.abs(Game.ball.vx);
+      audio.hit();
+    }
+
+    // гол
+    if(Game.ball.x < -40){ Game.scoreR++; audio.goal(); byId('scoreRight').textContent=Game.scoreR; serve(+1); }
+    if(Game.ball.x > W+40){ Game.scoreL++; audio.goal(); byId('scoreLeft').textContent=Game.scoreL; serve(-1); }
+
+    // перемога
+    if(Game.scoreL>=State.targetScore || Game.scoreR>=State.targetScore){
+      showWin(Game.scoreL>Game.scoreR ? t('p1wins') : t('p2wins'));
+    }
+  }
+  function serve(dir){
+    Game.ball.x=W/2; Game.ball.y=H/2;
+    const s=0.28*State.ballSpeed;
+    Game.ball.vx=s*dir; Game.ball.vy=(Math.random()<0.5?-1:1)*s*0.45;
+    Game.ball.trail.length=0; Game.servePause=1000;
+  }
+
+  /* ---------- Render ---------- */
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    const bg=ctx.createLinearGradient(0,0,0,H); bg.addColorStop(0,getCSS('--panel')); bg.addColorStop(1,getCSS('--panel2')); ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#00000055'; ctx.lineWidth=2; ctx.strokeRect(0,0,W,H);
+    ctx.strokeStyle=getCSS('--line'); ctx.lineWidth=2; ctx.setLineDash([10,12]); ctx.beginPath(); ctx.moveTo(W/2,10); ctx.lineTo(W/2,H-10); ctx.stroke(); ctx.setLineDash([]);
+
+    if(State.wind && Game.ball.trail.length){
+      for(let i=0;i<Game.ball.trail.length;i++){
+        const p=Game.ball.trail[i], a=i/Game.ball.trail.length;
+        ctx.fillStyle=`rgba(255,255,255,${a*0.35})`; ctx.beginPath(); ctx.arc(p.x,p.y,Math.max(2,Game.ball.r*a),0,Math.PI*2); ctx.fill();
+      }
+    }
+    ctx.fillStyle=getCSS('--p1'); roundRect(ctx, Game.left.x, Game.left.y-Game.left.h/2, Game.left.w, Game.left.h, 6, true, false);
+    ctx.fillStyle=getCSS('--p2'); roundRect(ctx, Game.right.x, Game.right.y-Game.right.h/2, Game.right.w, Game.right.h, 6, true, false);
+    const g=ctx.createRadialGradient(Game.ball.x,Game.ball.y,1,Game.ball.x,Game.ball.y,14); g.addColorStop(0,'#fff'); g.addColorStop(1,'#ffffff22');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(Game.ball.x,Game.ball.y,Game.ball.r,0,Math.PI*2); ctx.fill();
+  }
+  function roundRect(ctx,x,y,w,h,r,fill,stroke){
+    ctx.beginPath(); ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);     ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath(); if(fill) ctx.fill(); if(stroke) ctx.stroke();
+  }
+  function getCSS(v){ return getComputedStyle(document.body).getPropertyValue(v).trim(); }
+
+  /* ---------- Win ---------- */
+  function showWin(text){
+    ShowingWin=true; detachControls();
+    const wt=byId('winTitle'), wO=byId('winOverlay');
+    if(wt) wt.textContent=text;
+    if(wO) wO.style.display='flex';
+  }
+
+  /* ---------- Init ---------- */
+  applyI18N(); // RU за замовчуванням
+});
+</script>
+</body>
+</html>
